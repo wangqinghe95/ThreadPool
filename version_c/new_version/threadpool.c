@@ -7,6 +7,46 @@
 #define false 0
 #define true 1
 
+int getTaskSize(Queue_Task_T* task_queue)
+{
+    int size = 0;
+    size = task_queue->queue_size;
+    return size;
+}
+
+int getTaskFromQueue(Queue_Task_T* task_queue, Thread_Task_T* task)
+{
+
+    task->func_cb = task_queue->tasks[task_queue->queue_front].func_cb;
+    task->args = task_queue->tasks[task_queue->queue_front].args;
+    task_queue->queue_front = (task_queue->queue_front+1)%task_queue->queue_max_size;
+    task_queue->queue_size--;
+
+    pthread_cond_broadcast(&task_queue->cond_queue_not_full);
+
+    return 1;
+}
+
+static int addTaskIntoQueue(Queue_Task_T* task_queue, Thread_Task_T* task)
+{
+    if(task_queue->tasks[task_queue->queue_rear].args != NULL) {
+        free(task_queue->tasks[task_queue->queue_rear].args);
+        task_queue->tasks[task_queue->queue_rear].args = NULL;
+    }
+    task_queue->tasks[task_queue->queue_rear].func_cb = task->func_cb;
+    task_queue->tasks[task_queue->queue_rear].args = task->args;
+    task_queue->queue_rear = (task_queue->queue_rear+1)%task_queue->queue_max_size;
+    task_queue->queue_size++;
+
+    pthread_cond_signal(&task_queue->cond_queue_not_empty);
+    return 1;
+}
+
+static int bTaskQueueFull(Queue_Task_T* task_queue)
+{
+    return (task_queue->queue_size == task_queue->queue_max_size ? 0 : -1);
+}
+
 Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queue_max_num)
 {
     int i = 0;
@@ -37,7 +77,7 @@ Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queu
             printf("Malloc queue task error\n");
             break;
         }
-        memset(queue_task, 0 , sizeof(sizeof(Queue_Task_T)));
+        memset(queue_task, 0 , sizeof(Queue_Task_T));
 
         queue_task->queue_max_size = queue_max_num;
         queue_task->queue_size = 0;
@@ -45,8 +85,9 @@ Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queu
         queue_task->queue_rear = 0;
         queue_task->tasks = (Thread_Task_T*)malloc(queue_max_num*sizeof(Thread_Task_T));
 
-        if( 0 != pthread_mutex_init(&queue_task->mutex_queue, NULL)
-            || 0 != pthread_cond_init(&queue_task->cond_queue_not_empty,NULL)
+        memset(queue_task->tasks, 0 , queue_max_num*sizeof(Thread_Task_T));
+
+        if( 0 != pthread_cond_init(&queue_task->cond_queue_not_empty,NULL)
             || 0 != pthread_cond_init(&queue_task->cond_queue_not_full,NULL)){
                 printf("Init task queue mutex or cond error\n");
                 break;
@@ -75,7 +116,9 @@ Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queu
 
     } while (0);
     
+    destroy_thread_pool(pool);
 
+    return NULL;
 }
 
 void destroy_thread_pool(Thread_Pool_T* pool)
@@ -104,15 +147,15 @@ void destroy_thread_pool(Thread_Pool_T* pool)
             free(pool->queue_task->tasks);
             pool->queue_task->tasks = NULL;
         }
-        pthread_mutex_destroy(&pool->queue_task->mutex_queue);
         pthread_cond_destroy(&pool->queue_task->cond_queue_not_empty);
         pthread_cond_destroy(&pool->queue_task->cond_queue_not_full);
-
-
     }
 
     free(pool->queue_task);
     pool->queue_task = NULL;
+
+    free(pool->work_pthread);
+    pool->work_pthread = NULL;
 
     free(pool);
     pool = NULL;
@@ -122,10 +165,65 @@ void destroy_thread_pool(Thread_Pool_T* pool)
 
 void* work_func(void* threadpool)
 {
+    int i = 0;
+    Thread_Pool_T* pool = (Thread_Pool_T*)threadpool;
 
+    while (1)
+    {
+        pthread_mutex_lock(&pool->lock_work_thread);
+        while (0 == getTaskSize(pool->queue_task) && pool->shutdown == false)
+        {
+            printf("thread 0x%lu wait working\n", pthread_self());
+            pthread_cond_wait(&(pool->queue_task->cond_queue_not_empty), &pool->lock_work_thread);
+            printf("thread 0x%lu start working\n", pthread_self());
+        }
+
+        if(pool->shutdown) {
+            pthread_mutex_unlock(&pool->lock_work_thread);
+            printf("thread 0x%lu exit\n", pthread_self());
+            pthread_exit(NULL);
+        }
+
+        Thread_Task_T task;
+        getTaskFromQueue(pool->queue_task,&task);
+
+        pthread_mutex_unlock(&pool->lock_work_thread);
+
+        printf("Thread 0x%lu is ready working\n",pthread_self());
+        (*(task.func_cb))(task.args);
+
+        printf("Thread 0x%lu end working\n",pthread_self());
+        
+    }
+    
+    pthread_exit(NULL);
 }
 
 void* manage_func(void* threadpool)
 {
+    printf("Thread manage 0x%lu\n", pthread_self());
+}
 
+void add_task_into_task_queue(Thread_Pool_T* pool, CallbackFunction func, void* args)
+{
+    printf("Start add task into task_queue\n");
+
+    pthread_mutex_lock(&(pool->lock_work_thread));
+
+    while(0 == bTaskQueueFull(pool->queue_task) && pool->shutdown)
+    {
+        printf("TaskQueue full, please wait....\n");
+        pthread_cond_wait(&(pool->queue_task->cond_queue_not_empty), &pool->lock_work_thread);
+    }
+
+    printf("TaskQueue not full, add task\n");
+    Thread_Task_T task;
+    task.func_cb = func;
+    task.args = args;
+
+    addTaskIntoQueue(pool->queue_task, &task);
+
+    pthread_mutex_unlock(&(pool->lock_work_thread));
+
+    printf("add task end\n");
 }

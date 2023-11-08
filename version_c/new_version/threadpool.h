@@ -21,7 +21,6 @@ typedef struct Queue_Task_Tag
     int queue_front;
     int queue_rear;
 
-    pthread_mutex_t mutex_queue;
     pthread_cond_t cond_queue_not_full;  // indicate the queue_task is not full, can add task
     pthread_cond_t cond_queue_not_empty; // indicate the queue_task is not empty, can execuate work
 }Queue_Task_T;
@@ -50,9 +49,13 @@ Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queu
 void destroy_thread_pool(Thread_Pool_T* pool);
 
 // add a task into task queue
-void add_task_into_task_queue(CallbackFunction Task, void* args);
+void add_task_into_task_queue(Thread_Pool_T* pool, CallbackFunction Task, void* args);
 
 void* work_func(void* threadpool);
 
 void* manage_func(void* threadpool);
+
+int getTaskSize(Queue_Task_T* task_queue);
+
+int getTaskFromQueue(Queue_Task_T* task_queue, Thread_Task_T* task);
 #endif
