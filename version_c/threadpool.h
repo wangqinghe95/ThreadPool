@@ -32,6 +32,7 @@ typedef struct Thread_Pool_Tag
 
     int busy_thread_num;    // thread number for working
     int live_thread_num;    // total thread number for live
+    int wait_exit_num;      // the number of thread waitting to exit
 
     pthread_mutex_t lock_work_thread;   // a lock for to be working thread
     pthread_mutex_t lock_busy_thread;   // a lock for working
@@ -45,17 +46,19 @@ typedef struct Thread_Pool_Tag
 
 
 // init thread pool
-Thread_Pool_T* init_thread_pool(int min_thread_num, int max_thread_num, int queue_max_num);
-void destroy_thread_pool(Thread_Pool_T* pool);
+Thread_Pool_T* initThreadPool(int min_thread_num, int max_thread_num, int queue_max_num);
+void destroyThreadPool(Thread_Pool_T* pool);
 
 // add a task into task queue
-void add_task_into_task_queue(Thread_Pool_T* pool, CallbackFunction Task, void* args);
+void addTask2Queue(Thread_Pool_T* pool, CallbackFunction Task, void* args);
 
-void* work_func(void* threadpool);
+void* workFunc(void* threadpool);
 
-void* manage_func(void* threadpool);
+void* manageThreadPool(void* threadpool);
 
-int getTaskSize(Queue_Task_T* task_queue);
+int getTaskQueueSize(Queue_Task_T* task_queue);
 
 int getTaskFromQueue(Queue_Task_T* task_queue, Thread_Task_T* task);
+
+
 #endif
