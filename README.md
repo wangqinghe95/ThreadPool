@@ -7,10 +7,10 @@
 
 ## Introduction
 + [A ThreadPool implemented by C](./version_c/README.md)
-+ [A ThreadPool implemented by C++11](./version_c++11/)
++ [A ThreadPool implemented by C++11](./version_c++/README.md)
 + [A WorkerThread from Android](./version_c++/utils/src/WorkThread/WorkerThread.cpp)
 
-## [Implemented by C++11](./version_c++11/README.md)
+## [Implemented by C++11](./version_c++/README.md)
 
 ### 任务队列类（TaskQueue）
 1. 一个带有锁的队列，主要用来保持任务函数指针，并且队列元素在入队和出队过程中线程安全
