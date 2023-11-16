@@ -10,13 +10,8 @@ ThreadPool::ThreadPool(int min_num, int max_num, int queue_size_max)
                     , m_vec_thread(std::vector<std::thread>(min_num))
                     , m_bShutdown(false)
 {
-    initPool();
-}
-
-void ThreadPool::initPool()
-{
     for(int i = 0; i < m_vec_thread.size(); ++i) {
-        m_vec_thread.at(i) = std::thread(std::bind(&ThreadPool::executeTask, this));
+        m_vec_thread.at(i) = std::thread(std::bind(&ThreadPool::run, this));
     }
 }
 
@@ -28,37 +23,25 @@ ThreadPool::~ThreadPool()
     }
 }
 
-void ThreadPool::addTask(Task task)
+void ThreadPool::run()
 {
-    std::unique_lock<std::mutex> lock_task_queue(m_task_mutex);
-    m_task_queue.push(task);
-    m_condition_variable_task.notify_one();
-}
-
-void ThreadPool::executeTask()
-{
-    while(m_bShutdown != true)
+    while (m_bShutdown != true)
     {
-        std::unique_lock<std::mutex> lock_thread(m_thread_mutex);
-        if(m_task_queue.empty()){
-            m_condition_variable_task.wait(lock_thread);
+        std::unique_lock<std::mutex> lk(m_thread_mutex);
+        while(m_task_queue.empty()){
+            m_condition_variable_task.wait(lk);
         }
 
-        std::unique_lock<std::mutex> lock_task_queue(m_task_mutex);
-        if(!m_task_queue.empty()){
-            std::function<void()> func = m_task_queue.front();
-            m_task_queue.pop();
-
-            func();
-        }
-
-    }    
+        Task task;
+        if(true == m_task_queue.dequeue(task)) {
+            task();
+        }   
+    }
+    
 }
 
 void ThreadPool::shutdown()
 {
-    std::cout << __func__ << __LINE__ << std::endl;
-
     m_bShutdown = true;  
     m_condition_variable_task.notify_all();
     for(int i = 0; i < m_vec_thread.size(); ++i) {
@@ -66,4 +49,6 @@ void ThreadPool::shutdown()
             m_vec_thread.at(i).join();
         }
     }
+
+    std::cout << "threadpool destory"<< std::endl;
 }
